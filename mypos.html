@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AetherPOS | 雲端智慧市集</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background: #f3f4f6; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+    </style>
+</head>
+<body class="pb-20">
+
+<div id="app" class="max-w-md mx-auto">
+    <!-- 頂部狀態列 -->
+    <header class="bg-indigo-600 text-white p-4 sticky top-0 z-50 shadow-lg">
+        <div class="flex justify-between items-center">
+            <h1 class="text-xl font-bold flex items-center gap-2">
+                <i data-lucide="store"></i> AetherPOS
+            </h1>
+            <div id="syncStatus" class="text-xs bg-green-500 px-2 py-1 rounded">在線</div>
+        </div>
+    </header>
+
+    <!-- 儀表板區域 -->
+    <div id="dashboard" class="tab-content active p-4">
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="bg-white p-4 rounded-xl shadow">
+                <p class="text-gray-500 text-sm">今日營收</p>
+                <p id="todayRev" class="text-2xl font-bold text-indigo-600">$0</p>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow">
+                <p class="text-gray-500 text-sm">庫存警示</p>
+                <p id="lowStockCount" class="text-2xl font-bold text-red-500">0</p>
+            </div>
+        </div>
+        
+        <canvas id="revenueChart" class="bg-white p-4 rounded-xl shadow mb-6"></canvas>
+
+        <div class="bg-white p-4 rounded-xl shadow">
+            <h3 class="font-bold mb-2 flex items-center gap-2">
+                <i data-lucide="alert-triangle" class="text-orange-500"></i> 滯銷預警 (>30天)
+            </h3>
+            <ul id="stagnantList" class="text-sm text-gray-600 divide-y">
+                <!-- JS 動態渲染 -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- POS 結帳區域 -->
+    <div id="pos" class="tab-content p-4">
+        <div id="reader" class="w-full rounded-lg overflow-hidden mb-4"></div>
+        <div class="bg-white rounded-xl shadow p-4 mb-4">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="font-bold">購物車</h3>
+                <button onclick="clearCart()" class="text-red-500 text-sm">清空</button>
+            </div>
+            <div id="cartItems" class="space-y-3 mb-4 max-h-60 overflow-y-auto">
+                <!-- 購物車項目 -->
+            </div>
+            <div class="border-t pt-4">
+                <div class="flex justify-between mb-2">
+                    <span>攤位租金分攤 (今日)</span>
+                    <input type="number" id="dailyRent" value="0" class="w-20 border rounded px-1 text-right">
+                </div>
+                <div class="flex justify-between text-xl font-bold">
+                    <span>總計</span>
+                    <span id="cartTotal" class="text-indigo-600">$0</span>
+                </div>
+            </div>
+        </div>
+        <button onclick="checkout()" class="w-full bg-indigo-600 text-white py-4 rounded-xl font-bold shadow-lg">
+            確認結帳 / 收款
+        </button>
+    </div>
+
+    <!-- 庫存管理 -->
+    <div id="inventory" class="tab-content p-4">
+        <div class="flex gap-2 mb-4">
+            <button onclick="generateA4Labels()" class="flex-1 bg-gray-800 text-white p-2 rounded flex items-center justify-center gap-2 text-sm">
+                <i data-lucide="printer" class="w-4"></i> 列印 A4 標籤
+            </button>
+        </div>
+        <div id="productList" class="grid grid-cols-1 gap-3">
+            <!-- 產品列表 -->
+        </div>
+    </div>
+
+    <!-- 底部導覽 -->
+    <nav class="fixed bottom-0 left-0 right-0 bg-white border-t flex justify-around p-2 shadow-2xl">
+        <button onclick="showTab('dashboard')" class="flex flex-col items-center p-2 text-gray-400">
+            <i data-lucide="layout-dashboard"></i><span class="text-xs">數據</span>
+        </button>
+        <button onclick="showTab('pos')" class="flex flex-col items-center p-2 text-indigo-600">
+            <i data-lucide="shopping-cart"></i><span class="text-xs">結帳</span>
+        </button>
+        <button onclick="showTab('inventory')" class="flex flex-col items-center p-2 text-gray-400">
+            <i data-lucide="package"></i><span class="text-xs">庫存</span>
+        </button>
+        <button onclick="syncOfflineData()" class="flex flex-col items-center p-2 text-gray-400 relative">
+            <i data-lucide="refresh-cw"></i><span class="text-xs">同步</span>
+            <span id="offlineBadge" class="hidden absolute top-1 right-2 bg-red-500 w-2 h-2 rounded-full"></span>
+        </button>
+    </nav>
+</div>
+
+<script>
+    // --- 核心變數設定 ---
+    const API_URL = "https://script.google.com/macros/s/AKfycbwYEOi1rhB8AENqGIijTXaWMDpAffS91tdY1KR2DjAQmpU24qhvPwJScQDTYM2Rjphr/exec"; 
+    let products = [];
+    let cart = [];
+    let html5QrCode;
+
+    // --- 初始化 ---
+    document.addEventListener('DOMContentLoaded', () => {
+        lucide.createIcons();
+        loadLocalData();
+        initScanner();
+        renderDashboard();
+    });
+
+    function showTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+        document.getElementById(tabId).classList.add('active');
+        // 更新圖示顏色等邏輯...
+    }
+
+    // --- POS 邏輯 ---
+    function initScanner() {
+        html5QrCode = new Html5Qrcode("reader");
+        html5QrCode.start({ facingMode: "environment" }, { fps: 10, qrbox: 250 }, 
+            (decodedText) => {
+                addToCart(decodedText);
+            }
+        );
+    }
+
+    function addToCart(id) {
+        const product = products.find(p => p.id == id);
+        if (product) {
+            const existing = cart.find(i => i.id == id);
+            if (existing) existing.qty++;
+            else cart.push({...product, qty: 1});
+            renderCart();
+        }
+    }
+
+    function renderCart() {
+        const container = document.getElementById('cartItems');
+        let total = 0;
+        container.innerHTML = cart.map(item => {
+            total += item.price * item.qty;
+            return `
+                <div class="flex justify-between items-center border-b pb-2">
+                    <div>
+                        <p class="font-medium">${item.name}</p>
+                        <p class="text-xs text-gray-400">$${item.price}</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <button onclick="updateQty('${item.id}', -1)" class="bg-gray-100 px-2 rounded">-</button>
+                        <span>${item.qty}</span>
+                        <button onclick="updateQty('${item.id}', 1)" class="bg-gray-100 px-2 rounded">+</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        document.getElementById('cartTotal').innerText = `$${total}`;
+    }
+
+    // --- 離線同步機制 ---
+    function checkout() {
+        const rent = parseFloat(document.getElementById('dailyRent').value) || 0;
+        const totalItems = cart.reduce((sum, item) => sum + item.qty, 0);
+        const rentPerItem = totalItems > 0 ? rent / totalItems : 0;
+
+        const sale = {
+            id: 'S' + Date.now(),
+            items: cart,
+            subtotal: cart.reduce((sum, i) => sum + (i.price * i.qty), 0),
+            rentAllocation: rent,
+            netProfit: cart.reduce((sum, i) => sum + ((i.price - i.cost - rentPerItem) * i.qty), 0),
+            date: new Date().toISOString(),
+            paymentMethod: 'Cash', // 簡化處理
+            type: 'sale'
+        };
+
+        // 儲存至 LocalStorage
+        let pending = JSON.parse(localStorage.getItem('pendingSales') || '[]');
+        pending.push(sale);
+        localStorage.setItem('pendingSales', JSON.stringify(pending));
+        
+        document.getElementById('offlineBadge').classList.remove('hidden');
+        alert("訂單已儲存 (離線)");
+        cart = [];
+        renderCart();
+    }
+
+    async function syncOfflineData() {
+        const pending = JSON.parse(localStorage.getItem('pendingSales') || '[]');
+        if (pending.length === 0) return alert("尚無資料需同步");
+
+        try {
+            const response = await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action: 'syncData', data: { sales: pending } })
+            });
+            if (response.ok) {
+                localStorage.setItem('pendingSales', '[]');
+                document.getElementById('offlineBadge').classList.add('hidden');
+                alert("雲端同步完成！");
+                refreshData();
+            }
+        } catch (e) {
+            alert("同步失敗，請檢查網路連線");
+        }
+    }
+
+    // --- 標籤列印系統 (jsPDF + JsBarcode) ---
+    function generateA4Labels() {
+        const { jsPDF } = window.jspdf;
+        const doc = new jsPDF();
+        let x = 10, y = 10;
+        
+        products.forEach((prod, index) => {
+            if (index > 0 && index % 30 === 0) doc.addPage();
+            
+            // 繪製條碼與文字
+            const canvas = document.createElement('canvas');
+            JsBarcode(canvas, prod.id, { format: "CODE128", width: 1, height: 40 });
+            const barcodeImg = canvas.toDataURL("image/jpeg");
+            
+            doc.setFontSize(8);
+            doc.text(prod.name, x, y);
+            doc.addImage(barcodeImg, 'JPEG', x, y + 2, 40, 15);
+            doc.text(`$${prod.price}`, x + 42, y + 10);
+            
+            x += 65;
+            if (x > 150) { x = 10; y += 30; }
+        });
+        
+        doc.save("labels.pdf");
+    }
+
+    // --- 資料加載與圖表 ---
+    function renderDashboard() {
+        const ctx = document.getElementById('revenueChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+                datasets: [{
+                    label: '本週營收趨勢',
+                    data: [1200, 1900, 3000, 500, 2000, 4500, 3200],
+                    backgroundColor: '#6366f1'
+                }]
+            }
+        });
+    }
+
+    function loadLocalData() {
+        // 模擬從本地或遠端抓取產品
+        products = [
+            {id: '1001', name: '手工皮革錢包', price: 850, cost: 300, stock: 5, minStock: 2},
+            {id: '1002', name: '手作香氛蠟燭', price: 450, cost: 150, stock: 12, minStock: 5}
+        ];
+    }
+</script>
+</body>
+</html>
