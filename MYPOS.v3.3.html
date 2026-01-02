@@ -1,0 +1,1221 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>市集專業管理助手 | 旗艦響應修復版 V14.8</title>
+    
+    <!-- PWA 支援 -->
+    <link rel="manifest" href="data:application/json;base64,ewogICJuYW1lIjogIsW46ZuG5Yqp5omLIiwKICAic2hvcnRfbmFtZSI6ICLluILpm4YIiwKICAic3RhcnRfdXJsIjogIi4iLAogICJkaXNwbGF5IjogInN0YW5kYWxvbmUiLAogICJiYWNrZ3JvdW5kX2NvbG9yIjogIiNGREZCRjciLAogICJ0aGVtZV9jb2xvciI6ICIjNEEzNzI4Igp9">
+
+    <!-- 引入外部套件 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script defer src="https://unpkg.com/alpinejs@3.x.x/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://unpkg.com/dexie/dist/dexie.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap');
+        
+        :root {
+            --bg-main: #FDFBF7;
+            --brand-deep: #4A3728; 
+            --brand-mid: #8B5E3C;  
+            --brand-light: #A68B67; 
+            --brand-cream: #F5F1E9; 
+            --text-contrast: #212121; 
+        }
+
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: var(--bg-main);
+            color: var(--brand-deep);
+            overflow-x: hidden;
+        }
+
+        .custom-shadow { box-shadow: 0 10px 40px -10px rgba(74, 55, 40, 0.12); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        [x-cloak] { display: none !important; }
+
+        /* 按鈕規範 - Icon 居左 */
+        .btn-base { 
+            @apply px-6 py-4 rounded-2xl font-black transition-all duration-300 flex items-center justify-center gap-x-3 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-md border-2 border-transparent; 
+        }
+        .btn-primary { background-color: var(--brand-deep); color: var(--bg-main); @apply btn-base hover:brightness-125 hover:shadow-xl; }
+        .btn-blue { @apply btn-base bg-blue-600 text-white hover:bg-blue-700; }
+        .btn-danger { @apply btn-base bg-red-600 text-white hover:bg-red-700; }
+        .btn-secondary { background-color: var(--brand-cream); border-color: #E5E0D5; color: var(--brand-deep); @apply btn-base hover:bg-[#EDE8DE]; }
+        
+        .btn-tool { @apply h-[52px] px-5 rounded-xl font-bold border-2 border-[#E5E0D5] flex items-center justify-center gap-x-2 hover:bg-white transition-all text-sm; color: var(--brand-light); }
+
+        /* 輸入框規範 */
+        .input-heavy { @apply w-full border border-[#DED9CF] rounded-xl px-5 py-4 outline-none transition-all bg-white text-lg font-bold; color: var(--brand-deep); }
+        .input-heavy:focus { border-color: var(--brand-mid); box-shadow: 0 0 0 4px rgba(139, 94, 60, 0.1); }
+
+        .tab-active { background-color: var(--brand-mid); color: white !important; @apply shadow-lg; }
+
+        /* 彈窗文字顏色優化 (高對比) */
+        .modal-content h3, .modal-content label, .modal-content p, .modal-content span, .modal-content div { 
+            color: var(--text-contrast) !important; 
+        }
+
+        /* 支付卡片 */
+        .pay-card { @apply flex flex-col items-center justify-center p-6 rounded-[2.5rem] border-2 border-brand-cream bg-white transition-all duration-300 hover:border-brand-mid hover:bg-brand-bg hover:shadow-lg group active:scale-95; }
+        .pay-card i { @apply w-10 h-10 mb-3 transition-transform duration-300 group-hover:scale-110; }
+
+        /* 搜尋下拉選單 */
+        .search-dropdown { @apply absolute top-full left-0 w-full bg-white mt-3 rounded-[2.5rem] border-2 border-brand-mid shadow-[0_25px_60px_-15px_rgba(74,55,40,0.3)] z-[100] overflow-hidden max-h-[480px] overflow-y-auto; }
+        .search-item { @apply px-8 py-6 flex items-center gap-x-6 cursor-pointer hover:bg-brand-cream transition-all border-b border-brand-cream last:border-none; }
+        .search-item img { @apply w-20 h-20 rounded-[1.25rem] object-cover border-2 border-brand-cream; }
+
+        @keyframes slideUp { from { opacity: 0; transform: translateY(15px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-slide-up { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+    </style>
+</head>
+<body x-data="marketApp()" x-init="initDB()">
+
+    <!-- 1. 登入頁面 -->
+    <template x-if="!isLoggedIn">
+        <div class="min-h-screen w-full flex items-center justify-center bg-brand-bg p-6">
+            <div class="w-full max-w-[380px] bg-white p-8 md:p-10 rounded-[2.5rem] custom-shadow animate-slide-up text-center border-2 border-brand-cream">
+                <div class="mb-8">
+                    <div class="w-20 h-20 bg-brand-cream rounded-3xl flex items-center justify-center mx-auto mb-4 border-2 border-[#E5E0D5]">
+                        <i data-lucide="shield-check" class="text-brand-mid w-10 h-10"></i>
+                    </div>
+                    <h1 class="text-2xl font-black text-brand-deep tracking-tight">市集助手驗證</h1>
+                    <p class="text-brand-light text-sm mt-2 font-medium">請輸入 PIN 碼以開啟系統</p>
+                </div>
+
+                <div class="mb-6 p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl text-amber-800 text-xs font-bold">
+                    <i data-lucide="info" class="w-4 h-4 inline-block mr-1 mb-1"></i>
+                    預設 PIN 碼為：<span class="text-lg text-brand-deep underline">1234</span>
+                </div>
+
+                <form @submit.prevent="handleAuth" class="space-y-6">
+                    <div class="flex justify-center">
+                        <input type="password" x-model="authForm.pin" required autofocus class="input-heavy text-center tracking-[0.6em] text-3xl max-w-[220px]" placeholder="••••">
+                    </div>
+                    <button type="submit" class="btn-primary w-full py-5 text-xl flex items-center justify-center gap-x-2">
+                        <i data-lucide="log-in" class="w-6 h-6"></i> 進入系統
+                    </button>
+                </form>
+                
+                <div class="mt-8 pt-6 border-t-2 border-brand-cream">
+                    <button @click="handleAdminBypass" class="text-brand-light hover:text-brand-mid text-xs font-black flex items-center justify-center gap-x-2 mx-auto transition-colors">
+                        <i data-lucide="settings" class="w-4 h-4"></i> 進入後台管理 (維護模式)
+                    </button>
+                </div>
+            </div>
+        </div>
+    </template>
+
+    <!-- 2. 主程式介面 -->
+    <div x-show="isLoggedIn" x-cloak class="flex h-screen overflow-hidden flex-col lg:flex-row">
+        
+        <!-- 行動端頂部導覽 -->
+        <header class="lg:hidden bg-white border-b-2 border-brand-cream p-4 flex justify-between items-center z-30">
+            <div class="flex items-center gap-x-2 text-brand-mid">
+                <i data-lucide="store" class="w-6 h-6"></i>
+                <h1 class="font-black text-brand-deep">市集助手</h1>
+            </div>
+            <button @click="mobileMenuOpen = !mobileMenuOpen" class="p-2 text-brand-deep">
+                <i :data-lucide="mobileMenuOpen ? 'x' : 'menu'"></i>
+            </button>
+        </header>
+
+        <!-- 側邊導覽列 -->
+        <aside 
+            :class="mobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'"
+            class="fixed lg:static inset-y-0 left-0 w-64 bg-white border-r-2 border-brand-cream flex flex-col z-40 transition-transform duration-300 ease-in-out lg:z-20">
+            <div class="p-8 hidden lg:block">
+                <div class="flex items-center gap-x-3 text-brand-mid">
+                    <i data-lucide="store" class="w-8 h-8"></i>
+                    <h1 class="text-xl font-black tracking-tight text-brand-deep">市集助手</h1>
+                </div>
+            </div>
+            <nav class="flex-1 px-4 space-y-2 overflow-y-auto no-scrollbar pt-4 lg:pt-0">
+                <template x-for="item in menuItems">
+                    <button 
+                        x-show="!isBypassMode ? (!item.adminOnly || (item.adminOnly && currentUser?.role === 'Admin')) : (item.id === 'userAdmin')"
+                        @click="activeTab = item.id; mobileMenuOpen = false; loadData();"
+                        :class="activeTab === item.id ? 'tab-active' : 'text-brand-light hover:bg-brand-cream'"
+                        class="w-full flex items-center gap-4 px-6 py-4 rounded-xl transition-all duration-200 font-bold text-sm">
+                        <i :data-lucide="item.icon" class="w-5 h-5"></i>
+                        <span x-text="item.name"></span>
+                    </button>
+                </template>
+            </nav>
+            <div class="p-6 border-t border-brand-cream">
+                <button x-show="!isBypassMode && lowStockItems.length > 0" @click="showLowStockModal = true" class="w-full mb-4 bg-red-50 text-red-600 p-3 rounded-xl flex items-center justify-center gap-2 animate-pulse font-bold border border-red-100">
+                    <i data-lucide="alert-triangle" class="w-4 h-4"></i> 低庫存提醒 (<span x-text="lowStockItems.length"></span>)
+                </button>
+                <div class="bg-brand-cream p-4 rounded-2xl flex items-center gap-3 border border-[#E5E0D5]">
+                    <div class="w-10 h-10 bg-white rounded-xl flex items-center justify-center text-brand-mid shadow-sm">
+                        <i data-lucide="user" class="w-5 h-5"></i>
+                    </div>
+                    <div class="flex-1 overflow-hidden">
+                        <p class="text-[10px] text-brand-light font-black uppercase" x-text="isBypassMode ? '維護模式' : (currentUser?.role || 'Staff')"></p>
+                        <p class="text-xs font-bold text-brand-deep truncate" x-text="currentUser?.username || '使用者'"></p>
+                    </div>
+                    <button @click="handleLogout" class="text-brand-light hover:text-red-600"><i data-lucide="log-out" class="w-5 h-5"></i></button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 主要內容區 -->
+        <main class="flex-1 overflow-y-auto p-4 md:p-10 no-scrollbar bg-brand-bg relative">
+            <header class="flex flex-col md:flex-row justify-between items-start md:items-end mb-6 md:mb-10 gap-4">
+                <div>
+                    <h2 class="text-2xl md:text-3xl font-black text-brand-deep" x-text="getCurrentTitle()"></h2>
+                    <p class="text-brand-light font-medium mt-1 text-sm">當前位置：<span class="text-brand-mid font-bold" x-text="currentLocation"></span></p>
+                </div>
+                <div class="text-left md:text-right w-full md:w-auto">
+                    <p class="text-[10px] font-black text-brand-light/50 uppercase tracking-widest" x-text="todayDate"></p>
+                    <p class="text-lg md:text-xl font-bold text-brand-mid" x-text="currentTime"></p>
+                </div>
+            </header>
+
+            <!-- A. 今日概覽 -->
+            <div x-show="activeTab === 'dashboard'" x-cloak class="animate-slide-up space-y-6 md:space-y-8">
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                    <div class="bg-white p-6 md:p-8 rounded-3xl border-2 border-brand-cream shadow-sm">
+                        <p class="text-brand-light text-xs font-black uppercase tracking-widest">今日銷售額</p>
+                        <h3 class="text-3xl md:text-4xl font-black mt-2 text-brand-deep">NT$ <span x-text="stats.todaySales"></span></h3>
+                    </div>
+                    <div class="bg-white p-6 md:p-8 rounded-3xl border-2 border-brand-cream shadow-sm">
+                        <p class="text-brand-light text-xs font-black uppercase tracking-widest">今日預估淨利</p>
+                        <h3 class="text-3xl md:text-4xl font-black mt-2 text-brand-mid">NT$ <span x-text="stats.todayProfit"></span></h3>
+                    </div>
+                    <div class="bg-white p-6 md:p-8 rounded-3xl border-2 border-brand-cream shadow-sm">
+                        <p class="text-brand-light text-xs font-black uppercase tracking-widest">低庫存警示</p>
+                        <h3 class="text-3xl md:text-4xl font-black mt-2 text-red-600" x-text="lowStockItems.length"></h3>
+                    </div>
+                </div>
+                <div class="bg-white p-6 md:p-8 rounded-[2.5rem] border-2 border-brand-cream">
+                    <h4 class="font-black text-lg mb-6 text-brand-deep">今日銷售趨勢</h4>
+                    <div class="h-64 md:h-80 w-full relative">
+                        <canvas id="salesChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- B. 收銀結帳 (POS) -->
+            <div x-show="activeTab === 'pos'" x-cloak class="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 animate-slide-up">
+                <div class="lg:col-span-8 space-y-4">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div class="bg-white p-5 rounded-3xl border-2 border-brand-deep flex items-center gap-x-4 shadow-md relative">
+                            <i data-lucide="scan-barcode" class="text-brand-mid w-6 h-6 animate-pulse"></i>
+                            <input type="text" x-model="scannerBuffer" @keyup.enter="handleManualScan" placeholder="掃描條碼..." class="flex-1 bg-transparent border-none outline-none text-lg font-bold text-brand-deep">
+                        </div>
+                        <div class="relative">
+                            <div class="bg-white p-5 rounded-3xl border-2 border-brand-mid flex items-center gap-x-4 shadow-md">
+                                <i data-lucide="search" class="text-brand-mid w-6 h-6"></i>
+                                <input type="text" x-model="posSearchQuery" @input="handlePosSearch" placeholder="搜尋商品名稱..." class="flex-1 bg-transparent border-none outline-none text-lg font-bold text-brand-deep">
+                            </div>
+                            <div x-show="posSearchQuery.length > 0" class="search-dropdown" @click.away="posSearchQuery = ''">
+                                <template x-if="posSearchResults.length > 0">
+                                    <template x-for="p in posSearchResults" :key="p.sku">
+                                        <div class="search-item" @click="selectProductFromSearch(p)">
+                                            <img :src="p.imageBlob ? URL.createObjectURL(p.imageBlob) : 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23A68B67\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Crect width=\'18\' height=\'18\' x=\'3\' y=\'3\' rx=\'2\' ry=\'2\'/%3E%3Ccircle cx=\'9\' cy=\'9\' r=\'2\'/%3E%3Cpath d=\'m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21\'/%3E%3C/svg%3E'">
+                                            <div class="flex-1">
+                                                <p class="font-black text-brand-deep text-lg" x-text="p.name"></p>
+                                                <p class="text-[10px] text-brand-light font-mono" x-text="'SKU: ' + p.sku"></p>
+                                            </div>
+                                            <div class="text-right">
+                                                <p class="font-black text-brand-mid text-xl" x-text="'$' + p.price"></p>
+                                                <span class="text-[10px] font-bold text-brand-light" x-text="'庫存: ' + p.stock"></span>
+                                            </div>
+                                        </div>
+                                    </template>
+                                </template>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-3xl border-2 border-brand-cream overflow-x-auto custom-shadow">
+                        <table class="w-full text-left min-w-[600px]">
+                            <thead class="bg-brand-cream text-brand-light text-xs font-black uppercase tracking-widest">
+                                <tr><th class="px-6 py-4">商品項目</th><th class="px-6 py-4">單價</th><th class="px-6 py-4">數量</th><th class="px-8 py-4 text-right">小計</th><th class="px-6 py-4"></th></tr>
+                            </thead>
+                            <tbody class="divide-y divide-brand-cream">
+                                <template x-for="(item, index) in cart" :key="index">
+                                    <tr class="hover:bg-brand-bg/50">
+                                        <td class="px-6 py-4 flex items-center gap-x-4">
+                                            <img :src="item.imageBlob ? URL.createObjectURL(item.imageBlob) : 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23A68B67\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Crect width=\'18\' height=\'18\' x=\'3\' y=\'3\' rx=\'2\' ry=\'2\'/%3E%3Ccircle cx=\'9\' cy=\'9\' r=\'2\'/%3E%3Cpath d=\'m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21\'/%3E%3C/svg%3E'" class="w-10 h-10 rounded-lg object-cover">
+                                            <div class="font-black text-brand-deep text-sm" x-text="item.name"></div>
+                                        </td>
+                                        <td class="px-6 py-4 font-bold text-sm" x-text="'$' + item.price"></td>
+                                        <td class="px-6 py-4">
+                                            <div class="flex items-center gap-x-3">
+                                                <button @click="updateCartQty(index, -1)" class="w-8 h-8 rounded-lg border-2 border-[#E5E0D5] flex items-center justify-center hover:bg-brand-cream font-black">-</button>
+                                                <span x-text="item.qty" class="w-4 text-center font-black text-sm"></span>
+                                                <button @click="updateCartQty(index, 1)" class="w-8 h-8 rounded-lg border-2 border-[#E5E0D5] flex items-center justify-center hover:bg-brand-cream font-black">+</button>
+                                            </div>
+                                        </td>
+                                        <td class="px-8 py-4 text-right font-black text-sm" x-text="'$' + (item.price * item.qty)"></td>
+                                        <td class="px-6 py-4 text-right"><button @click="removeFromCart(index)" class="text-brand-light hover:text-red-600"><i data-lucide="trash-2" class="w-5 h-5"></i></button></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-4 space-y-6">
+                    <div class="bg-white p-6 rounded-3xl border-2 border-brand-deep shadow-sm">
+                        <h4 class="font-black text-sm mb-4 flex items-center gap-x-2 text-brand-deep"><i data-lucide="user-plus" class="w-4 h-4"></i> 會員連結</h4>
+                        <div class="flex gap-x-2 h-14">
+                            <input type="text" x-model="posMemberSearch" placeholder="輸入手機號碼..." class="flex-1 border-2 border-brand-cream rounded-xl px-4 outline-none focus:border-brand-mid font-bold text-sm">
+                            <button @click="searchMemberForPOS" class="bg-[#4A3728] text-white w-14 h-14 rounded-xl hover:brightness-125 flex items-center justify-center shrink-0 shadow-md transition-all">
+                                <i data-lucide="search" class="w-6 h-6 text-white"></i>
+                            </button>
+                        </div>
+                        <template x-if="selectedMember">
+                            <div class="mt-4 p-4 bg-brand-bg rounded-2xl border border-brand-mid/20">
+                                <div class="flex justify-between items-start">
+                                    <div><p class="font-black text-brand-deep" x-text="selectedMember.name"></p><p class="text-xs text-brand-light font-bold" x-text="selectedMember.phone"></p></div>
+                                    <button @click="selectedMember = null" class="text-brand-light"><i data-lucide="x-circle" class="w-4 h-4"></i></button>
+                                </div>
+                                <div class="mt-3 pt-3 border-t border-brand-mid/10 flex justify-between items-center">
+                                    <span class="text-xs font-black text-brand-light">剩餘點數</span>
+                                    <span class="text-lg font-black text-brand-mid" x-text="selectedMember.points"></span>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div class="bg-white p-6 md:p-8 rounded-[2.5rem] border-2 border-brand-cream shadow-sm space-y-6">
+                        <h4 class="font-black text-xl border-b border-brand-cream pb-4 text-brand-deep">結帳摘要</h4>
+                        <div class="space-y-4">
+                            <div class="flex justify-between text-brand-light font-bold"><span>商品總計</span><span class="text-brand-deep" x-text="'$' + cartTotal"></span></div>
+                            
+                            <div class="space-y-2">
+                                <div class="flex justify-between items-center">
+                                    <span class="text-brand-light font-bold text-sm">折扣設定</span>
+                                    <div class="flex bg-brand-cream rounded-lg p-1">
+                                        <button @click="posDiscountType = 'amount'" :class="posDiscountType === 'amount' ? 'bg-white shadow-sm' : ''" class="px-3 py-1 text-xs font-black rounded-md transition-all text-brand-deep">$</button>
+                                        <button @click="posDiscountType = 'percent'" :class="posDiscountType === 'percent' ? 'bg-white shadow-sm' : ''" class="px-3 py-1 text-xs font-black rounded-md transition-all text-brand-deep">%</button>
+                                    </div>
+                                </div>
+                                <input type="number" x-model="posDiscountValue" class="input-heavy !py-2 !text-right !text-red-600 !text-sm" placeholder="0">
+                            </div>
+
+                            <template x-if="selectedMember">
+                                <div class="space-y-4 pt-2 border-t border-brand-cream">
+                                    <div class="space-y-2">
+                                        <div class="flex justify-between items-center"><span class="text-brand-light font-bold text-sm">點數折抵</span><span class="text-[10px] text-brand-light font-bold" x-text="'匯率: ' + sysSettings.pointRate + ' 點 = $1'"></span></div>
+                                        <input type="number" x-model="posPointsToUse" @input="validatePoints" class="input-heavy !py-2 !text-right !text-blue-600 !text-sm" placeholder="使用點數">
+                                    </div>
+                                    <div class="space-y-2">
+                                        <div class="flex justify-between items-center"><span class="text-brand-light font-bold text-sm">本次贈送點數</span></div>
+                                        <input type="number" x-model="posPointsToGive" class="input-heavy !py-2 !text-right !text-green-600 !text-sm" placeholder="贈送點數">
+                                    </div>
+                                </div>
+                            </template>
+                        </div>
+                        <div class="pt-6 border-t-2 border-dashed border-brand-cream">
+                            <div class="flex justify-between items-end">
+                                <span class="font-black text-brand-light uppercase text-xs">應收總額</span>
+                                <span class="text-4xl md:text-5xl font-black text-brand-mid" x-text="'$' + finalPayable"></span>
+                            </div>
+                        </div>
+                        <button @click="openPaymentModal" class="btn-primary w-full py-5 md:py-6 text-xl md:text-2xl shadow-xl">確認結帳</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- C. 商品管理 -->
+            <div x-show="activeTab === 'inventory'" x-cloak class="space-y-6 animate-slide-up">
+                <div class="flex flex-col md:flex-row justify-between items-stretch md:items-center bg-white p-6 rounded-3xl border-2 border-brand-cream shadow-sm gap-4">
+                    <div class="flex flex-wrap gap-x-3 items-center flex-1">
+                        <div class="relative w-full md:w-80">
+                            <i data-lucide="search" class="absolute left-5 top-1/2 -translate-y-1/2 text-brand-light w-5 h-5"></i>
+                            <input type="text" x-model="searchQuery" @input.debounce.300ms="filterProducts" placeholder="搜尋名稱或條碼..." class="input-heavy pl-14 !py-3">
+                        </div>
+                        <button @click="downloadTemplate" class="btn-tool flex-1 md:flex-none flex items-center gap-x-2"><i data-lucide="download" class="w-4 h-4"></i> 範本</button>
+                        <label class="btn-tool flex-1 md:flex-none cursor-pointer flex items-center gap-x-2">
+                            <i data-lucide="upload" class="w-4 h-4"></i> 匯入
+                            <input type="file" @change="importInventoryExcel" class="hidden" accept=".xlsx, .xls">
+                        </label>
+                    </div>
+                    <button @click="openAddModal()" class="btn-primary px-10 py-4 text-lg flex items-center gap-x-2"><i data-lucide="plus" class="w-6 h-6"></i> 新增商品</button>
+                </div>
+                <div class="bg-white rounded-[2.5rem] border-2 border-brand-cream overflow-x-auto shadow-sm">
+                    <table class="w-full text-left min-w-[700px]">
+                        <thead class="bg-brand-cream text-brand-light text-[10px] font-black uppercase tracking-widest">
+                            <tr><th class="px-10 py-6">商品詳情</th><th class="px-10 py-6">庫存</th><th class="px-10 py-6">售價</th><th class="px-10 py-6 text-center">操作</th></tr>
+                        </thead>
+                        <tbody class="divide-y divide-brand-cream">
+                            <template x-for="p in products.filter(x => x.name.toLowerCase().includes(searchQuery.toLowerCase()) || x.sku.includes(searchQuery))" :key="p.sku">
+                                <tr class="hover:bg-brand-bg/50 transition-colors">
+                                    <td class="px-10 py-6 flex items-center gap-x-6">
+                                        <div class="w-16 h-16 rounded-2xl bg-brand-cream overflow-hidden border border-[#E5E0D5]">
+                                            <img :src="p.imageBlob ? URL.createObjectURL(p.imageBlob) : 'data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\' fill=\'none\' stroke=\'%23A68B67\' stroke-width=\'2\' stroke-linecap=\'round\' stroke-linejoin=\'round\'%3E%3Crect width=\'18\' height=\'18\' x=\'3\' y=\'3\' rx=\'2\' ry=\'2\'/%3E%3Ccircle cx=\'9\' cy=\'9\' r=\'2\'/%3E%3Cpath d=\'m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21\'/%3E%3C/svg%3E'" class="w-full h-full object-cover">
+                                        </div>
+                                        <div><p class="font-black text-brand-deep text-lg" x-text="p.name"></p><p class="text-xs font-mono text-brand-light" x-text="p.sku"></p></div>
+                                    </td>
+                                    <td class="px-10 py-6">
+                                        <span :class="p.stock <= sysSettings.lowStockThreshold ? 'bg-red-100 text-red-700' : 'bg-brand-cream text-brand-light'" class="px-4 py-2 rounded-xl font-black text-xs" x-text="p.stock + ' PCS'"></span>
+                                    </td>
+                                    <td class="px-10 py-6 font-black text-brand-mid text-lg" x-text="'$' + p.price"></td>
+                                    <td class="px-10 py-6 text-center">
+                                        <div class="flex justify-center gap-x-4">
+                                            <button @click="openEditModal(p)" class="btn-blue !px-4 !py-2 text-sm flex items-center gap-x-1"><i data-lucide="edit-3" class="w-4 h-4"></i> 編輯</button>
+                                            <button @click="deleteProduct(p.sku)" class="btn-danger !px-4 !py-2 text-sm flex items-center gap-x-1"><i data-lucide="trash-2" class="w-4 h-4"></i> 刪除</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- D. 會員管理 -->
+            <div x-show="activeTab === 'members'" x-cloak class="space-y-6 animate-slide-up">
+                <div class="flex flex-col md:flex-row justify-between items-stretch md:items-center bg-white p-6 rounded-3xl border-2 border-brand-cream shadow-sm gap-4">
+                    <input type="text" x-model="memberSearchQuery" placeholder="搜尋姓名或手機..." class="input-heavy max-w-md !py-3">
+                    <button @click="openMemberModal()" class="btn-primary px-10 py-4 text-lg flex items-center gap-x-2"><i data-lucide="user-plus" class="w-6 h-6"></i> 新增會員</button>
+                </div>
+                <div class="bg-white rounded-[2.5rem] border-2 border-brand-cream overflow-x-auto shadow-sm">
+                    <table class="w-full text-left min-w-[600px]">
+                        <thead class="bg-brand-cream text-brand-light text-[10px] font-black uppercase tracking-widest">
+                            <tr><th class="px-10 py-6">姓名</th><th class="px-10 py-6">手機</th><th class="px-10 py-6">點數</th><th class="px-10 py-6 text-center">操作</th></tr>
+                        </thead>
+                        <tbody class="divide-y divide-brand-cream">
+                            <template x-for="m in filteredMembers" :key="m.phone">
+                                <tr>
+                                    <td class="px-10 py-6 font-black text-brand-deep" x-text="m.name"></td>
+                                    <td class="px-10 py-6 font-bold text-brand-light" x-text="m.phone"></td>
+                                    <td class="px-10 py-6 font-black text-brand-mid" x-text="m.points"></td>
+                                    <td class="px-10 py-6 text-center">
+                                        <div class="flex justify-center gap-x-4">
+                                            <button @click="openMemberModal(m)" class="btn-blue !px-4 !py-2 text-xs flex items-center gap-x-1"><i data-lucide="edit-3" class="w-3 h-3"></i> 編輯</button>
+                                            <button @click="deleteMember(m.phone)" class="btn-danger !px-4 !py-2 text-xs flex items-center gap-x-1"><i data-lucide="trash-2" class="w-3 h-3"></i> 移除</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- E. 租金場次 -->
+            <div x-show="activeTab === 'rent'" x-cloak class="grid grid-cols-1 lg:grid-cols-12 gap-8 animate-slide-up">
+                <div class="lg:col-span-4 bg-white p-8 rounded-[2.5rem] border-2 border-brand-cream shadow-sm h-fit space-y-6">
+                    <h3 class="font-black text-xl border-b border-brand-cream pb-4 text-brand-deep">場次設定</h3>
+                    <div class="space-y-4">
+                        <div><label class="text-xs font-black text-brand-light block mb-2 uppercase tracking-widest">日期</label><input type="date" x-model="rentForm.date" class="input-heavy !py-3"></div>
+                        <div><label class="text-xs font-black text-brand-light block mb-2 uppercase tracking-widest">地點</label><input type="text" x-model="rentForm.location" class="input-heavy !py-3"></div>
+                        <div><label class="text-xs font-black text-brand-light block mb-2 uppercase tracking-widest">租金</label><input type="number" x-model="rentForm.amount" class="input-heavy !py-3 text-red-600 font-black"></div>
+                        <button @click="saveRent" class="btn-primary w-full py-5 text-lg flex items-center justify-center gap-x-2"><i data-lucide="save" class="w-6 h-6"></i> 儲存設定</button>
+                    </div>
+                </div>
+                <div class="lg:col-span-8 bg-white rounded-[2.5rem] border-2 border-brand-cream overflow-x-auto shadow-sm">
+                    <table class="w-full text-left min-w-[500px]">
+                        <thead class="bg-brand-cream text-brand-light text-[10px] font-black uppercase tracking-widest">
+                            <tr><th class="px-10 py-6">日期</th><th class="px-10 py-6">地點</th><th class="px-10 py-6 text-right">金額</th><th class="px-10 py-6"></th></tr>
+                        </thead>
+                        <tbody class="divide-y divide-brand-cream">
+                            <template x-for="r in rentList" :key="r.date">
+                                <tr>
+                                    <td class="px-10 py-6 font-black text-brand-deep" x-text="r.date"></td>
+                                    <td class="px-10 py-6 font-bold text-brand-light" x-text="r.location"></td>
+                                    <td class="px-10 py-6 text-right font-black text-red-600" x-text="'$' + r.amount"></td>
+                                    <td class="px-10 py-6 text-right"><button @click="deleteRent(r.date)" class="text-brand-light hover:text-red-600"><i data-lucide="trash-2" class="w-5 h-5"></i></button></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- F. 銷售紀錄 -->
+            <div x-show="activeTab === 'history'" x-cloak class="space-y-6 animate-slide-up">
+                <div class="flex flex-col md:flex-row gap-x-4 bg-white p-6 rounded-3xl border-2 border-brand-cream shadow-sm">
+                    <input type="date" x-model="historyFilter.date" @change="loadData()" class="input-heavy !py-2 !text-sm max-w-xs">
+                    <input type="text" x-model="historyFilter.search" placeholder="搜尋訂單內容..." class="input-heavy !py-2 !text-sm">
+                </div>
+                <div class="bg-white rounded-[2.5rem] border-2 border-brand-cream overflow-x-auto shadow-sm">
+                    <table class="w-full text-left min-w-[800px]">
+                        <thead class="bg-brand-cream text-brand-light text-[10px] font-black uppercase tracking-widest">
+                            <tr><th class="px-10 py-6">交易時間</th><th class="px-10 py-6">內容摘要</th><th class="px-10 py-6">支付方式</th><th class="px-10 py-6 text-right">實收金額</th><th class="px-10 py-6 text-center">操作</th></tr>
+                        </thead>
+                        <tbody class="divide-y divide-brand-cream">
+                            <template x-for="sale in filteredSales" :key="sale.id">
+                                <tr>
+                                    <td class="px-10 py-6 font-bold text-brand-light text-sm" x-text="sale.timestamp"></td>
+                                    <td class="px-10 py-6 font-black text-brand-deep truncate max-w-xs text-sm" x-text="sale.items.map(i => i.name).join(', ')"></td>
+                                    <td class="px-10 py-6"><span class="px-3 py-1 bg-brand-cream rounded-lg text-[10px] font-bold text-brand-mid" x-text="sale.paymentMethod"></span></td>
+                                    <td class="px-10 py-6 text-right font-black text-lg text-brand-mid" x-text="'$' + sale.total"></td>
+                                    <td class="px-10 py-6 text-center">
+                                        <div class="flex justify-center gap-x-3">
+                                            <button @click="viewOrderDetails(sale)" class="text-brand-mid font-black hover:underline text-sm">詳情</button>
+                                            <button @click="confirmDeleteSale(sale)" class="text-red-500 font-black hover:underline text-sm">移除</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- G. 後台管理 -->
+            <div x-show="activeTab === 'userAdmin'" x-cloak class="space-y-8 animate-slide-up">
+                <div class="bg-white p-6 md:p-8 rounded-[2.5rem] border-2 border-brand-deep shadow-sm">
+                    <h3 class="font-black text-xl mb-6 flex items-center gap-x-2 text-brand-deep"><i data-lucide="sliders" class="w-6 h-6"></i> 系統全域設定</h3>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+                        <div><label class="text-xs font-black text-brand-light block mb-2 uppercase tracking-widest">低庫存警示門檻 (PCS)</label><input type="number" x-model="sysSettings.lowStockThreshold" @change="saveSysSettings" class="input-heavy !py-3"></div>
+                        <div><label class="text-xs font-black text-brand-light block mb-2 uppercase tracking-widest">點數換算匯率 (N 點 = $1)</label><input type="number" x-model="sysSettings.pointRate" @change="saveSysSettings" class="input-heavy !py-3"></div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-[2.5rem] border-2 border-brand-cream overflow-x-auto shadow-sm">
+                    <div class="p-8 border-b border-brand-cream flex justify-between items-center">
+                        <h3 class="font-black text-xl text-brand-deep">使用者權限維護</h3>
+                        <button @click="openUserModal()" class="btn-primary px-6 py-2 text-sm flex items-center gap-x-2"><i data-lucide="user-plus" class="w-5 h-5"></i> 新增使用者</button>
+                    </div>
+                    <table class="w-full text-left min-w-[500px]">
+                        <thead class="bg-brand-cream text-brand-light text-[10px] font-black uppercase tracking-widest">
+                            <tr><th class="px-10 py-6">使用者</th><th class="px-10 py-6">權限</th><th class="px-10 py-6 text-center">操作</th></tr>
+                        </thead>
+                        <tbody class="divide-y divide-brand-cream">
+                            <template x-for="u in allUsers" :key="u.id">
+                                <tr>
+                                    <td class="px-10 py-6 font-black text-brand-deep text-lg" x-text="u.username"></td>
+                                    <td class="px-10 py-6 font-bold text-brand-light" x-text="u.role"></td>
+                                    <td class="px-10 py-6 text-center">
+                                        <div class="flex justify-center gap-x-4">
+                                            <button @click="openUserModal(u)" class="btn-blue !px-4 !py-2 text-sm flex items-center gap-x-1"><i data-lucide="edit-3" class="w-4 h-4"></i> 編輯</button>
+                                            <button @click="deleteUser(u.id)" class="btn-danger !px-4 !py-2 text-sm flex items-center gap-x-1" :disabled="u.id === currentUser?.id"><i data-lucide="trash-2" class="w-4 h-4"></i> 刪除</button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="bg-white p-6 md:p-8 rounded-[2.5rem] border-2 border-brand-mid shadow-sm">
+                    <h3 class="font-black text-xl mb-6 flex items-center gap-x-2 text-brand-deep"><i data-lucide="database" class="w-6 h-6"></i> 資料維護與備份</h3>
+                    <div class="flex flex-col sm:flex-row gap-4">
+                        <button @click="exportBackup" class="btn-secondary flex-1 py-6 flex items-center justify-center gap-x-3">
+                            <i data-lucide="download" class="w-8 h-8"></i>
+                            <span class="text-lg">匯出完整備份 (.json)</span>
+                        </button>
+                        <label class="btn-secondary flex-1 py-6 flex items-center justify-center gap-x-3 cursor-pointer">
+                            <i data-lucide="upload" class="w-8 h-8"></i>
+                            <span class="text-lg">匯入還原資料</span>
+                            <input type="file" @change="importBackup" class="hidden" accept=".json">
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <!-- 結帳確認 -->
+    <div x-show="showPaymentModal" x-cloak class="fixed inset-0 bg-brand-deep/60 backdrop-blur-md z-[150] flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-[440px] rounded-[3.5rem] shadow-2xl overflow-hidden animate-slide-up border-4 border-brand-deep modal-content">
+            <div class="p-8 md:p-10 bg-brand-cream border-b-2 border-[#E5E0D5] text-center">
+                <h3 class="text-2xl md:text-3xl">結帳確認</h3>
+                <div class="mt-4 inline-block px-6 py-2 bg-white rounded-full border-2 border-brand-mid/20">
+                    <p class="text-brand-mid font-black text-2xl md:text-3xl" x-text="'NT$ ' + finalPayable"></p>
+                </div>
+            </div>
+            <div class="p-6 md:p-10">
+                <div x-show="!cashCheckoutMode" class="grid grid-cols-2 gap-4 md:gap-6">
+                    <button @click="cashCheckoutMode = true" class="pay-card"><i data-lucide="banknote" class="text-green-600"></i><span class="font-black text-sm">現金支付</span></button>
+                    <button @click="processCheckout('Line Pay')" class="pay-card"><i data-lucide="smartphone" class="text-green-500"></i><span class="font-black text-sm">Line Pay</span></button>
+                    <button @click="processCheckout('轉帳')" class="pay-card"><i data-lucide="send" class="text-blue-500"></i><span class="font-black text-sm">銀行轉帳</span></button>
+                    <button @click="processCheckout('信用卡')" class="pay-card"><i data-lucide="credit-card" class="text-purple-500"></i><span class="font-black text-sm">信用卡</span></button>
+                </div>
+                <div x-show="cashCheckoutMode" class="space-y-6 animate-slide-up">
+                    <div class="text-center">
+                        <label class="text-xs uppercase tracking-widest">請輸入實收金額</label>
+                        <input type="number" x-model="cashReceived" class="input-heavy !text-4xl !py-6 text-center !rounded-[2rem] border-brand-mid max-w-[240px] mx-auto block" placeholder="0" autofocus>
+                    </div>
+                    <div class="bg-brand-cream p-6 rounded-[2.5rem] border-2 border-[#E5E0D5] flex justify-between items-center">
+                        <div><p class="text-xs uppercase">找零金額</p><p :class="cashReceived - finalPayable < 0 ? 'text-red-500' : 'text-green-600'" class="text-3xl md:text-4xl font-black mt-1" x-text="'$' + (cashReceived - finalPayable)"></p></div>
+                        <i data-lucide="coins" class="w-10 h-10 text-brand-mid/30"></i>
+                    </div>
+                    <div class="flex gap-x-4">
+                        <button @click="cashCheckoutMode = false; cashReceived = 0" class="btn-secondary flex-1 !rounded-2xl py-4">返回</button>
+                        <button @click="processCheckout('現金')" :disabled="cashReceived < finalPayable" class="btn-primary flex-[2] !rounded-2xl py-4 text-lg">確認收訖</button>
+                    </div>
+                </div>
+            </div>
+            <div class="p-6 bg-brand-cream text-center border-t border-[#E5E0D5]" x-show="!cashCheckoutMode">
+                <button @click="showPaymentModal = false" class="text-brand-light font-black hover:text-brand-deep transition-colors flex items-center justify-center gap-x-2 mx-auto">
+                    <i data-lucide="x-circle" class="w-5 h-5"></i> 取消結帳
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 訂單詳情 Modal (已更新：加入會員資訊) -->
+    <div x-show="showOrderModal" x-cloak class="fixed inset-0 bg-brand-deep/60 backdrop-blur-md z-[150] flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-slide-up border-4 border-brand-deep modal-content">
+            <div class="p-8 bg-brand-cream border-b-2 border-[#E5E0D5] flex justify-between items-center">
+                <h3 class="text-2xl">訂單詳情</h3>
+                <button @click="showOrderModal = false" class="text-brand-light hover:text-red-600"><i data-lucide="x" class="w-6 h-6"></i></button>
+            </div>
+            <div class="p-8 space-y-6 max-h-[70vh] overflow-y-auto no-scrollbar" x-if="selectedOrder">
+                
+                <!-- 會員資訊區塊 (新增) -->
+                <template x-if="selectedOrder && selectedOrder.memberPhone">
+                    <div class="bg-brand-cream/40 p-5 rounded-2xl border border-brand-mid/10 space-y-2">
+                        <div class="flex items-center gap-x-2 mb-2 border-b border-brand-mid/10 pb-2">
+                            <i data-lucide="user" class="w-5 h-5 text-brand-mid"></i>
+                            <span class="font-black text-brand-deep text-sm">會員資訊</span>
+                        </div>
+                        <div class="flex justify-between items-center text-sm">
+                            <span class="text-brand-light font-bold">姓名</span>
+                            <span class="font-black text-brand-deep" x-text="getMemberName(selectedOrder.memberPhone)"></span>
+                        </div>
+                        <div class="flex justify-between items-center text-sm">
+                            <span class="text-brand-light font-bold">手機</span>
+                            <span class="font-mono font-bold text-brand-deep" x-text="selectedOrder.memberPhone"></span>
+                        </div>
+                        <div class="flex justify-between items-center text-sm" x-show="selectedOrder.pointsUsed > 0">
+                            <span class="text-brand-light font-bold">使用點數</span>
+                            <span class="font-black text-blue-600" x-text="'-' + selectedOrder.pointsUsed"></span>
+                        </div>
+                        <div class="flex justify-between items-center text-sm" x-show="selectedOrder.pointsEarned > 0">
+                            <span class="text-brand-light font-bold">獲得點數</span>
+                            <span class="font-black text-green-600" x-text="'+' + selectedOrder.pointsEarned"></span>
+                        </div>
+                    </div>
+                </template>
+
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-black text-brand-light uppercase tracking-widest">交易時間</span>
+                    <span class="font-bold text-brand-deep" x-text="selectedOrder.timestamp"></span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="text-xs font-black text-brand-light uppercase tracking-widest">支付方式</span>
+                    <span class="px-3 py-1 bg-brand-cream rounded-lg text-xs font-black text-brand-mid" x-text="selectedOrder.paymentMethod"></span>
+                </div>
+                <div class="border-t border-brand-cream pt-4">
+                    <table class="w-full text-left">
+                        <thead class="text-brand-light text-[10px] font-black uppercase tracking-widest">
+                            <tr><th class="py-2">品項</th><th class="py-2 text-right">單價</th><th class="py-2 text-right">數量</th><th class="py-2 text-right">小計</th></tr>
+                        </thead>
+                        <tbody class="divide-y divide-brand-cream">
+                            <template x-for="item in selectedOrder.items">
+                                <tr>
+                                    <td class="py-3 font-black text-brand-deep text-sm" x-text="item.name"></td>
+                                    <td class="py-3 text-right text-sm" x-text="'$' + item.price"></td>
+                                    <td class="py-3 text-right text-sm" x-text="item.qty"></td>
+                                    <td class="py-3 text-right font-black text-sm" x-text="'$' + (item.price * item.qty)"></td>
+                                </tr>
+                            </template>
+                        </tbody>
+                    </table>
+                </div>
+                <div class="border-t-2 border-dashed border-brand-cream pt-4 flex justify-between items-end">
+                    <span class="font-black text-brand-light uppercase text-xs">總金額</span>
+                    <span class="text-3xl font-black text-brand-mid" x-text="'$' + selectedOrder.total"></span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 低庫存警示 Modal -->
+    <div x-show="showLowStockModal" x-cloak class="fixed inset-0 bg-brand-deep/60 backdrop-blur-md z-[150] flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-lg rounded-[3rem] shadow-2xl overflow-hidden animate-slide-up border-4 border-red-600 modal-content">
+            <div class="p-8 bg-red-50 border-b-2 border-red-100 flex justify-between items-center">
+                <div class="flex items-center gap-x-3 text-red-600">
+                    <i data-lucide="alert-triangle" class="w-6 h-6"></i>
+                    <h3 class="text-2xl font-black">低庫存清單</h3>
+                </div>
+                <button @click="showLowStockModal = false" class="text-red-400 hover:text-red-700"><i data-lucide="x" class="w-6 h-6"></i></button>
+            </div>
+            <div class="p-0 max-h-[60vh] overflow-y-auto no-scrollbar">
+                <table class="w-full text-left">
+                    <thead class="bg-brand-cream text-brand-light text-[10px] font-black uppercase tracking-widest sticky top-0">
+                        <tr><th class="px-8 py-4">商品名稱</th><th class="px-8 py-4 text-right">目前庫存</th></tr>
+                    </thead>
+                    <tbody class="divide-y divide-brand-cream">
+                        <template x-for="p in lowStockItems">
+                            <tr class="hover:bg-red-50/50">
+                                <td class="px-8 py-4">
+                                    <p class="font-black text-brand-deep" x-text="p.name"></p>
+                                    <p class="text-xs font-mono text-brand-light" x-text="p.sku"></p>
+                                </td>
+                                <td class="px-8 py-4 text-right">
+                                    <span class="px-3 py-1 bg-red-100 text-red-700 rounded-lg font-black text-sm" x-text="p.stock + ' PCS'"></span>
+                                </td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+                <div x-show="lowStockItems.length === 0" class="p-10 text-center text-brand-light font-bold">
+                    目前沒有低庫存商品
+                </div>
+            </div>
+            <div class="p-6 bg-brand-cream border-t border-[#E5E0D5]">
+                <button @click="showLowStockModal = false" class="btn-secondary w-full py-4">關閉</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 使用者編輯 Modal -->
+    <div x-show="showUserModal" x-cloak class="fixed inset-0 bg-brand-deep/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+        <div class="bg-white w-full max-md rounded-[3rem] shadow-2xl overflow-hidden animate-slide-up border-4 border-brand-deep modal-content">
+            <div class="p-8 bg-brand-cream border-b-2 border-[#E5E0D5]"><h3 class="text-2xl" x-text="userEditMode ? '編輯使用者' : '新增使用者'"></h3></div>
+            <div class="p-10 space-y-6">
+                <div><label class="text-xs uppercase tracking-widest">姓名</label><input type="text" x-model="userForm.username" class="input-heavy !py-3"></div>
+                <div><label class="text-xs uppercase tracking-widest">PIN 碼</label><input type="password" x-model="userForm.pin" class="input-heavy !py-3" placeholder="不修改請留空"></div>
+                <div><label class="text-xs uppercase tracking-widest">權限</label><select x-model="userForm.role" class="input-heavy !py-3"><option value="Staff">一般職員 (Staff)</option><option value="Admin">管理員 (Admin)</option></select></div>
+                <button @click="saveUser" class="btn-primary w-full py-5 text-xl shadow-lg flex items-center justify-center gap-x-2"><i data-lucide="save" class="w-6 h-6"></i> 儲存設定</button>
+                <button @click="showUserModal = false" class="btn-secondary w-full mt-2">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 商品編輯 Modal -->
+    <div x-show="showProductModal" x-cloak class="fixed inset-0 bg-brand-deep/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-xl rounded-[3rem] shadow-2xl overflow-hidden animate-slide-up border-4 border-brand-deep modal-content">
+            <div class="p-8 bg-brand-cream flex justify-between items-center border-b-2 border-[#E5E0D5]">
+                <h3 class="text-2xl" x-text="editMode ? '修改商品資訊' : '新增商品項目'"></h3>
+                <button @click="showProductModal = false" class="text-brand-light hover:text-red-600"><i data-lucide="x" class="w-6 h-6"></i></button>
+            </div>
+            <div class="p-8 space-y-6 max-h-[70vh] overflow-y-auto no-scrollbar">
+                <div class="flex justify-center">
+                    <div class="w-32 h-32 bg-brand-cream rounded-[2rem] border-4 border-dashed border-[#DED9CF] flex items-center justify-center overflow-hidden relative group hover:border-brand-mid transition-all">
+                        <template x-if="newProduct.imageBlob">
+                            <img :src="URL.createObjectURL(newProduct.imageBlob)" class="w-full h-full object-cover">
+                        </template>
+                        <template x-if="!newProduct.imageBlob">
+                            <div class="flex flex-col items-center justify-center">
+                                <i data-lucide="image-plus" class="w-10 h-10 text-brand-light"></i>
+                            </div>
+                        </template>
+                        <input type="file" @change="handleImageUpload" class="absolute inset-0 opacity-0 cursor-pointer" accept="image/*">
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div><label class="text-xs uppercase tracking-widest">商品名稱</label><input type="text" x-model="newProduct.name" class="input-heavy !py-3"></div>
+                    <div class="grid grid-cols-2 gap-x-4">
+                        <div><label class="text-xs uppercase tracking-widest">條碼 (SKU)</label><input type="text" x-model="newProduct.sku" :disabled="editMode" class="input-heavy !py-3"></div>
+                        <div><label class="text-xs uppercase tracking-widest">庫存</label><input type="number" x-model="newProduct.stock" class="input-heavy !py-3"></div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-x-4">
+                        <div class="bg-brand-cream p-4 rounded-2xl border-2 border-[#E5E0D5]"><label class="text-xs block mb-1 uppercase tracking-widest">售價</label><input type="number" x-model="newProduct.price" class="w-full bg-transparent border-none outline-none text-xl font-black text-brand-mid"></div>
+                        <div class="bg-brand-cream p-4 rounded-2xl border-2 border-[#E5E0D5]"><label class="text-xs block mb-1 uppercase tracking-widest">成本</label><input type="number" x-model="newProduct.cost" class="w-full bg-transparent border-none outline-none text-xl font-black text-brand-deep"></div>
+                    </div>
+                </div>
+                <button @click="saveProduct" class="btn-primary w-full py-5 text-lg shadow-xl flex items-center justify-center gap-x-2"><i data-lucide="save" class="w-6 h-6"></i> 儲存商品資料</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 會員編輯 Modal -->
+    <div x-show="showMemberModal" x-cloak class="fixed inset-0 bg-brand-deep/60 backdrop-blur-md z-[100] flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-md rounded-[3rem] shadow-2xl overflow-hidden animate-slide-up border-4 border-brand-deep modal-content">
+            <div class="p-8 bg-brand-cream border-b-2 border-[#E5E0D5]"><h3 class="text-2xl" x-text="memberEditMode ? '編輯會員' : '新增會員'"></h3></div>
+            <div class="p-10 space-y-6">
+                <div><label class="text-xs uppercase tracking-widest">姓名</label><input type="text" x-model="newMember.name" class="input-heavy !py-3"></div>
+                <div><label class="text-xs uppercase tracking-widest">手機</label><input type="text" x-model="newMember.phone" :disabled="memberEditMode" class="input-heavy !py-3"></div>
+                <div><label class="text-xs uppercase tracking-widest">點數</label><input type="number" x-model="newMember.points" class="input-heavy !py-3"></div>
+                <button @click="saveMember" class="btn-primary w-full py-5 text-xl shadow-lg flex items-center justify-center gap-x-2"><i data-lucide="user-check" class="w-6 h-6"></i> 確認儲存</button>
+                <button @click="showMemberModal = false" class="btn-secondary w-full mt-2">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 警示 Modal -->
+    <div x-show="showAlertModal" x-cloak class="fixed inset-0 bg-brand-deep/80 backdrop-blur-sm z-[300] flex items-center justify-center p-4">
+        <div class="bg-white w-full max-w-xs rounded-[2.5rem] p-10 text-center animate-slide-up shadow-2xl border-4 border-red-600 modal-content">
+            <div class="w-16 h-16 bg-red-50 text-red-600 rounded-full flex items-center justify-center mx-auto mb-6"><i data-lucide="alert-triangle" class="w-8 h-8"></i></div>
+            <h4 class="text-xl font-black" x-text="alertTitle"></h4>
+            <p class="text-brand-light font-bold mt-3 text-sm" x-text="alertMsg"></p>
+            <button @click="showAlertModal = false" class="btn-danger w-full mt-8 py-4 text-lg">了解</button>
+        </div>
+    </div>
+
+    <script>
+        function marketApp() {
+            return {
+                isLoggedIn: false,
+                isBypassMode: false,
+                currentUser: null,
+                mobileMenuOpen: false,
+                authForm: { pin: '' },
+                activeTab: 'dashboard',
+                menuItems: [
+                    { id: 'dashboard', name: '今日概覽', icon: 'layout-dashboard', adminOnly: false },
+                    { id: 'pos', name: '收銀結帳', icon: 'zap', adminOnly: false },
+                    { id: 'inventory', name: '商品管理', icon: 'package', adminOnly: false },
+                    { id: 'members', name: '會員管理', icon: 'users', adminOnly: false },
+                    { id: 'history', name: '銷售紀錄', icon: 'receipt', adminOnly: false },
+                    { id: 'rent', name: '租金場次', icon: 'calendar-days', adminOnly: false },
+                    { id: 'userAdmin', name: '後台管理', icon: 'shield', adminOnly: true }
+                ],
+                
+                todayDate: new Date().toLocaleDateString('zh-TW', { year: 'numeric', month: 'long', day: 'numeric' }),
+                todayString: new Date().toISOString().slice(0, 10),
+                currentTime: '',
+                currentLocation: '市集現場',
+                
+                products: [],
+                filteredProducts: [],
+                sales: [],
+                members: [],
+                allUsers: [],
+                rentList: [],
+                
+                showProductModal: false,
+                showMemberModal: false,
+                showPaymentModal: false,
+                showOrderModal: false,
+                showLowStockModal: false,
+                showAlertModal: false,
+                showUserModal: false,
+                
+                editMode: false,
+                memberEditMode: false,
+                userEditMode: false,
+                
+                alertTitle: '',
+                alertMsg: '',
+                searchQuery: '',
+                memberSearchQuery: '',
+                posSearchQuery: '',
+                posSearchResults: [],
+                
+                newProduct: { name: '', sku: '', price: 0, cost: 0, stock: 0, imageBlob: null },
+                newMember: { name: '', phone: '', points: 0 },
+                userForm: { id: null, username: '', pin: '', role: 'Staff' },
+                rentForm: { date: new Date().toISOString().slice(0, 10), location: '', amount: 0 },
+                historyFilter: { date: new Date().toISOString().slice(0, 10), search: '' },
+                
+                sysSettings: { lowStockThreshold: 5, pointRate: 100 },
+                stats: { todaySales: 0, todayProfit: 0 },
+                lowStockItems: [],
+                cart: [],
+                scannerBuffer: '',
+                posDiscountType: 'amount',
+                posDiscountValue: 0,
+                posPointsToUse: 0,
+                posPointsToGive: 0,
+                selectedMember: null,
+                posMemberSearch: '',
+                cashCheckoutMode: false,
+                cashReceived: 0,
+                selectedOrder: null,
+
+                db: null,
+
+                async initDB() {
+                    this.db = new Dexie("MarketProDB_V13");
+                    this.db.version(1).stores({
+                        products: "sku, name, price, stock",
+                        members: "phone, name, points",
+                        sales: "++id, timestamp, total, memberPhone",
+                        settings: "key",
+                        users: "++id, username, password_hash",
+                        rent: "date, location, amount"
+                    });
+
+                    const adminCount = await this.db.users.count();
+                    if (adminCount === 0) {
+                        const hash = await this.hashPassword('1234');
+                        await this.db.users.add({ username: '管理員', password_hash: hash, role: 'Admin' });
+                    }
+
+                    await this.loadSysSettings();
+                    this.checkSession();
+                    this.startClock();
+                    lucide.createIcons();
+                },
+
+                async loadSysSettings() {
+                    const config = await this.db.settings.get('config');
+                    if (config) this.sysSettings = config.value;
+                },
+
+                async saveSysSettings() {
+                    await this.db.settings.put({ key: 'config', value: this.sysSettings });
+                    this.showToast('系統設定已儲存');
+                    this.calculateStats();
+                },
+
+                async hashPassword(pin) {
+                    const msgUint8 = new TextEncoder().encode(pin);
+                    const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+                    return Array.from(new Uint8Array(hashBuffer)).map(b => b.toString(16).padStart(2, '0')).join('');
+                },
+
+                async handleAuth() {
+                    const hash = await this.hashPassword(this.authForm.pin);
+                    const user = await this.db.users.where('password_hash').equals(hash).first();
+                    if (user) {
+                        this.currentUser = user;
+                        this.isLoggedIn = true;
+                        this.isBypassMode = false;
+                        localStorage.setItem('market_session_v13', JSON.stringify(user));
+                        this.loadData();
+                        this.showToast('驗證成功');
+                    } else {
+                        alert('PIN 碼錯誤');
+                    }
+                },
+
+                handleAdminBypass() { 
+                    this.currentUser = { username: '維護者', role: 'Admin' };
+                    this.isLoggedIn = true;
+                    this.isBypassMode = true;
+                    this.activeTab = 'userAdmin';
+                    this.loadData();
+                    this.showToast('已進入維護模式');
+                },
+
+                checkSession() {
+                    const session = localStorage.getItem('market_session_v13');
+                    if (session) { this.currentUser = JSON.parse(session); this.isLoggedIn = true; this.loadData(); }
+                },
+
+                handleLogout() { localStorage.removeItem('market_session_v13'); window.location.reload(); },
+
+                async loadData() {
+                    if (!this.db) return;
+                    this.products = await this.db.products.toArray();
+                    this.members = await this.db.members.toArray();
+                    this.sales = await this.db.sales.reverse().toArray();
+                    this.allUsers = await this.db.users.toArray();
+                    this.rentList = await this.db.rent.toArray();
+                    this.calculateStats();
+                    this.updateCharts();
+                    setTimeout(() => lucide.createIcons(), 50);
+                },
+
+                get filteredSales() { 
+                    return this.sales.filter(s => {
+                        const rawDateStr = s.timestamp.split(' ')[0];
+                        const parts = rawDateStr.split(/\/|-/);
+                        if (parts.length < 3) return false;
+                        const y = parts[0];
+                        const m = parts[1].padStart(2, '0');
+                        const d = parts[2].padStart(2, '0');
+                        const saleDate = `${y}-${m}-${d}`;
+                        const matchesDate = saleDate === this.historyFilter.date;
+                        const matchesSearch = this.historyFilter.search ? s.items.some(i => i.name.includes(this.historyFilter.search)) : true;
+                        return matchesDate && matchesSearch;
+                    }); 
+                },
+
+                get filteredMembers() { 
+                    const q = (this.memberSearchQuery || '').trim().toLowerCase();
+                    if (!q) return this.members;
+                    return this.members.filter(m => (m.name || '').toLowerCase().includes(q) || (m.phone || '').includes(q)); 
+                },
+
+                get finalPayable() { 
+                    let total = this.cart.reduce((sum, i) => sum + (i.price * i.qty), 0);
+                    const discVal = Number(this.posDiscountValue) || 0;
+                    if (this.posDiscountType === 'amount') {
+                        total -= discVal;
+                    } else {
+                        total = total * (1 - (discVal / 100));
+                    }
+                    const pointsDisc = (Number(this.posPointsToUse) || 0) / (this.sysSettings.pointRate || 100);
+                    total -= pointsDisc;
+                    return Math.max(0, Math.round(total)); 
+                },
+
+                async processCheckout(method) {
+                    if (method === '現金' && this.cashReceived < this.finalPayable) return;
+
+                    const cartItems = JSON.parse(JSON.stringify(this.cart));
+                    const finalTotal = Number(this.finalPayable);
+                    const pointsToGive = Number(this.posPointsToGive) || 0;
+                    const pointsUsed = Number(this.posPointsToUse) || 0;
+                    const memberPhone = this.selectedMember ? String(this.selectedMember.phone) : null;
+
+                    for (const item of cartItems) {
+                        const p = await this.db.products.get(item.sku);
+                        if (!p || p.stock < item.qty) {
+                            this.alertTitle = '庫存不足';
+                            this.alertMsg = `商品「${item.name}」庫存不足。`;
+                            this.showAlertModal = true;
+                            return;
+                        }
+                    }
+
+                    const now = new Date();
+                    const y = now.getFullYear();
+                    const m = String(now.getMonth() + 1).padStart(2, '0');
+                    const d = String(now.getDate()).padStart(2, '0');
+                    const h = String(now.getHours()).padStart(2, '0');
+                    const min = String(now.getMinutes()).padStart(2, '0');
+                    const s = String(now.getSeconds()).padStart(2, '0');
+                    const formattedTime = `${y}/${m}/${d} ${h}:${min}:${s}`;
+
+                    const saleData = {
+                        items: cartItems,
+                        total: finalTotal,
+                        paymentMethod: method,
+                        timestamp: formattedTime,
+                        memberPhone,
+                        pointsUsed,
+                        pointsEarned: pointsToGive
+                    };
+
+                    try {
+                        await this.db.transaction('rw', this.db.products, this.db.sales, this.db.members, async (tx) => {
+                            const productTable = tx.products;
+                            const memberTable  = tx.members;
+                            const salesTable   = tx.sales;
+
+                            for (const item of cartItems) {
+                                const p = await productTable.get(item.sku);
+                                await productTable.update(item.sku, { stock: p.stock - item.qty });
+                            }
+
+                            if (memberPhone) {
+                                const m = await memberTable.get(memberPhone);
+                                if (m) {
+                                    await memberTable.update(memberPhone, { points: (Number(m.points) || 0) - pointsUsed + pointsToGive });
+                                }
+                            }
+
+                            await salesTable.add(saleData);
+                        });
+
+                        this.cart = [];
+                        this.posPointsToUse = 0;
+                        this.posPointsToGive = 0;
+                        this.posDiscountValue = 0;
+                        this.selectedMember = null;
+                        this.showPaymentModal = false;
+                        this.cashCheckoutMode = false;
+
+                        await this.loadData();
+                        this.showToast('結帳完成');
+
+                    } catch (e) {
+                        console.error('Checkout Error:', e);
+                        alert('結帳失敗，請檢查資料庫狀態');
+                    }
+                },
+
+                async saveUser() {
+                    if (!this.userForm.username) return alert('請輸入姓名');
+                    const userData = { username: this.userForm.username, role: this.userForm.role };
+                    
+                    if (this.userEditMode && this.userForm.id) {
+                        userData.id = this.userForm.id;
+                    } else {
+                        delete userData.id; 
+                    }
+
+                    if (this.userForm.pin) {
+                        userData.password_hash = await this.hashPassword(this.userForm.pin);
+                    } else if (this.userEditMode) {
+                        const existing = await this.db.users.get(this.userForm.id);
+                        userData.password_hash = existing.password_hash;
+                    } else {
+                        return alert('新使用者必須設定 PIN 碼');
+                    }
+
+                    await this.db.users.put(userData);
+                    this.showUserModal = false;
+                    await this.loadData();
+                    this.showToast('使用者已更新');
+                },
+
+                async saveMember() {
+                    if (!this.newMember.name || !this.newMember.phone) return alert('請填寫姓名與手機');
+                    await this.db.members.put({ ...this.newMember });
+                    this.showMemberModal = false; await this.loadData(); this.showToast('會員資料已更新');
+                },
+                async saveProduct() { await this.db.products.put({ ...this.newProduct, stock: parseInt(this.newProduct.stock) }); this.showProductModal = false; await this.loadData(); this.showToast('商品已儲存'); },
+                async deleteProduct(sku) { if(confirm('確定移除？')) { await this.db.products.delete(sku); await this.loadData(); } },
+                async deleteMember(phone) { if(confirm('確定移除？')) { await this.db.members.delete(phone); await this.loadData(); } },
+                async saveRent() { await this.db.rent.put({ ...this.rentForm, amount: Number(this.rentForm.amount) }); this.showToast('租金場次已儲存'); await this.loadData(); },
+                async deleteRent(date) { if(confirm('確定移除？')) { await this.db.rent.delete(date); await this.loadData(); } },
+                getRentForDate(dateStr) { return this.rentList.find(x => x.date === dateStr) || { amount: 0, location: '' }; },
+                
+                calculateStats() {
+                    const todaySalesList = this.sales.filter(s => {
+                        const rawDate = s.timestamp.split(' ')[0];
+                        const parts = rawDate.split(/[\/\-]/);
+                        if(parts.length < 3) return false;
+                        const normalized = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+                        return normalized === this.todayString;
+                    });
+
+                    this.stats.todaySales = todaySalesList.reduce((sum, s) => sum + s.total, 0);
+                    const rent = this.getRentForDate(this.todayString);
+                    this.currentLocation = rent.location || '市集現場';
+                    this.stats.todayProfit = this.stats.todaySales - rent.amount;
+                    this.lowStockItems = this.products.filter(p => p.stock <= this.sysSettings.lowStockThreshold);
+                },
+
+                updateCharts() {
+                    const canvas = document.getElementById('salesChart');
+                    if (!canvas) return;
+                    const ctx = canvas.getContext('2d');
+                    if (window.myChart) window.myChart.destroy();
+                    
+                    const todaySales = this.sales.filter(s => {
+                        const rawDate = s.timestamp.split(' ')[0];
+                        const parts = rawDate.split(/[\/\-]/);
+                        if(parts.length < 3) return false;
+                        const normalized = `${parts[0]}-${parts[1].padStart(2, '0')}-${parts[2].padStart(2, '0')}`;
+                        return normalized === this.todayString;
+                    });
+
+                    window.myChart = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels: todaySales.map(s => s.timestamp.split(' ')[1]),
+                            datasets: [{ label: '銷售額', data: todaySales.map(s => s.total), borderColor: '#8B5E3C', backgroundColor: 'rgba(139, 94, 60, 0.1)', fill: true, tension: 0.4 }]
+                        },
+                        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+                    });
+                },
+                async handleImageUpload(e) {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.readAsDataURL(file);
+                    reader.onload = (event) => {
+                        const img = new Image();
+                        img.src = event.target.result;
+                        img.onload = () => {
+                            const canvas = document.createElement('canvas');
+                            const MAX_WIDTH = 600;
+                            let width = img.width, height = img.height;
+                            if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+                            canvas.width = width; canvas.height = height;
+                            const ctx = canvas.getContext('2d');
+                            ctx.drawImage(img, 0, 0, width, height);
+                            canvas.toBlob((blob) => { this.newProduct.imageBlob = blob; }, 'image/jpeg', 0.7);
+                        };
+                    };
+                },
+                async exportBackup() {
+                    const backup = {
+                        products: await this.db.products.toArray(),
+                        members: await this.db.members.toArray(),
+                        sales: await this.db.sales.toArray(),
+                        rent: await this.db.rent.toArray()
+                    };
+                    for (let p of backup.products) { if (p.imageBlob) { p.imageBlobBase64 = await this.blobToBase64(p.imageBlob); delete p.imageBlob; } }
+                    const blob = new Blob([JSON.stringify(backup)], { type: 'application/json' });
+                    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `Market_Backup.json`; a.click();
+                },
+                async importBackup(e) {
+                    const file = e.target.files[0];
+                    if (!file || !confirm('確定要還原嗎？')) return;
+                    const reader = new FileReader();
+                    reader.onload = async (event) => {
+                        const data = JSON.parse(event.target.result);
+                        await this.db.products.clear(); await this.db.members.clear(); await this.db.sales.clear(); await this.db.rent.clear();
+                        for (let p of data.products) { if (p.imageBlobBase64) { p.imageBlob = await this.base64ToBlob(p.imageBlobBase64); delete p.imageBlobBase64; } }
+                        await this.db.products.bulkAdd(data.products); await this.db.members.bulkAdd(data.members); await this.db.sales.bulkAdd(data.sales); await this.db.rent.bulkAdd(data.rent || []);
+                        alert('還原成功！'); window.location.reload();
+                    };
+                    reader.readAsText(file);
+                },
+                blobToBase64(blob) { return new Promise((resolve) => { const reader = new FileReader(); reader.onloadend = () => resolve(reader.result); reader.readAsDataURL(blob); }); },
+                async base64ToBlob(base64) { const res = await fetch(base64); return await res.blob(); },
+                handlePosSearch() {
+                    const q = this.posSearchQuery.trim().toLowerCase();
+                    if (q.length < 1) { this.posSearchResults = []; return; }
+                    this.posSearchResults = this.products.filter(p => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)).slice(0, 10);
+                },
+                selectProductFromSearch(p) {
+                    const item = this.cart.find(c => c.sku === p.sku);
+                    if (item) item.qty++; else this.cart.push({ ...p, qty: 1 });
+                    this.posSearchQuery = ''; this.showToast(`已加入 ${p.name}`);
+                },
+                openAddModal() { this.editMode = false; this.newProduct = { name: '', sku: '', price: 0, cost: 0, stock: 0, imageBlob: null }; this.showProductModal = true; },
+                openEditModal(p) { this.editMode = true; this.newProduct = { ...p }; this.showProductModal = true; },
+                openMemberModal(m = null) { this.memberEditMode = !!m; this.newMember = m ? { ...m } : { name: '', phone: '', points: 0 }; this.showMemberModal = true; },
+                searchMemberForPOS() { 
+                    const m = this.members.find(x => x.phone === this.posMemberSearch); 
+                    if (m) { this.selectedMember = m; this.posMemberSearch = ''; this.posPointsToGive = Math.floor(this.cartTotal / 100); }
+                    else { this.showToast('找不到會員'); }
+                },
+                updateCartQty(i, delta) { this.cart[i].qty += delta; if (this.cart[i].qty <= 0) this.cart.splice(i, 1); },
+                removeFromCart(i) { this.cart.splice(i, 1); },
+                startClock() { setInterval(() => { this.currentTime = new Date().toLocaleTimeString('zh-TW', { hour12: false }); }, 1000); },
+                showToast(msg) { 
+                    const t = document.createElement('div'); 
+                    t.className = `fixed bottom-10 left-1/2 -translate-x-1/2 px-10 py-5 rounded-2xl shadow-2xl bg-white text-brand-deep border-2 border-brand-deep z-[300] font-black animate-slide-up`; 
+                    t.innerText = msg; 
+                    document.body.appendChild(t); 
+                    setTimeout(() => t.remove(), 3000); 
+                },
+                getCurrentTitle() { return this.menuItems.find(i => i.id === this.activeTab)?.name || '系統'; },
+                get cartTotal() { return this.cart.reduce((sum, i) => sum + (i.price * i.qty), 0); },
+                filterProducts() { const q = this.searchQuery.toLowerCase(); this.filteredProducts = this.products.filter(p => p.name.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q)); },
+                viewOrderDetails(sale) { this.selectedOrder = sale; this.showOrderModal = true; },
+                confirmDeleteSale(sale) { if(confirm('確定移除此筆銷售紀錄？')) { this.db.sales.delete(sale.id); this.loadData(); } },
+                validatePoints() { if (this.selectedMember && this.posPointsToUse > this.selectedMember.points) this.posPointsToUse = this.selectedMember.points; },
+                openPaymentModal() { if (this.cart.length > 0) this.showPaymentModal = true; },
+                downloadTemplate() {
+                    const data = [['name', 'sku', 'price', 'stock']];
+                    const ws = XLSX.utils.aoa_to_sheet(data);
+                    const wb = XLSX.utils.book_new();
+                    XLSX.utils.book_append_sheet(wb, ws, "Template");
+                    XLSX.writeFile(wb, "商品匯入範本.xlsx");
+                },
+                importInventoryExcel(e) {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = async (evt) => {
+                        const workbook = XLSX.read(evt.target.result, { type: 'binary' });
+                        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[workbook.SheetNames[0]]);
+                        const productsToImport = rows.map(row => ({
+                            name: row.name || '未命名',
+                            sku: String(row.sku),
+                            price: Number(row.price) || 0,
+                            stock: Number(row.stock) || 0
+                        }));
+                        await this.db.products.bulkPut(productsToImport);
+                        this.showToast('匯入完成');
+                        this.loadData();
+                    };
+                    reader.readAsBinaryString(file);
+                },
+                handleManualScan() {
+                    const p = this.products.find(x => x.sku === this.scannerBuffer);
+                    if (p) {
+                        this.addToCart(p);
+                        this.scannerBuffer = '';
+                        this.showToast(`已加入 ${p.name}`);
+                    } else {
+                        this.showToast('找不到該條碼商品');
+                        this.scannerBuffer = '';
+                    }
+                },
+                addToCart(p) { const item = this.cart.find(c => c.sku === p.sku); if (item) item.qty++; else this.cart.push({ ...p, qty: 1 }); },
+                openUserModal(u = null) { this.userEditMode = !!u; this.userForm = u ? { ...u, pin: '' } : { id: null, username: '', pin: '', role: 'Staff' }; this.showUserModal = true; },
+                
+                // --- 新增：取得會員名稱 ---
+                getMemberName(phone) {
+                    const m = this.members.find(x => x.phone === phone);
+                    return m ? m.name : '未知會員';
+                },
+
+                initGlobalScanner() {
+                    if ('serviceWorker' in navigator && window.location.protocol.startsWith('http')) {
+                        navigator.serviceWorker.register('sw.js').catch(() => {});
+                    }
+                }
+            }
+        }
+    </script>
+</body>
+</html>
